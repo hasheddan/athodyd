@@ -17,29 +17,33 @@ limitations under the License.
 package example
 
 import (
-	"log"
-
-	corev1 "k8s.io/api/core/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
+	crossplaneapis "github.com/crossplaneio/crossplane/apis"
+	"github.com/crossplaneio/stack-gcp/apis"
+	"github.com/crossplaneio/stack-gcp/pkg/controller"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// C just is
-type C struct{}
+// Adds GCP controllers to manager
+// Copied from https://github.com/crossplaneio/stack-gcp/blob/master/cmd/stack/main.go
+func controllerSetupWithManager(mgr manager.Manager) error {
+	if err := (&controller.Controllers{}).SetupWithManager(mgr); err != nil {
+		return err
+	}
 
-// SetupWithManager just is
-func (c *C) SetupWithManager(m manager.Manager) error {
-	r := &R{}
-	return ctrl.NewControllerManagedBy(m).Named("test").For(&corev1.Service{}).Complete(r)
+	return nil
 }
 
-// R just is
-type R struct{}
+// Adds GCP and Crossplane API types to scheme
+// Copied from https://github.com/crossplaneio/stack-gcp/blob/master/cmd/stack/main.go
+func addToScheme(scheme *runtime.Scheme) error {
+	if err := apis.AddToScheme(scheme); err != nil {
+		return err
+	}
 
-// Reconcile likes to
-func (r *R) Reconcile(o reconcile.Request) (reconcile.Result, error) {
-	// Your business logic to implement the API by creating, updating, deleting objects goes here.
-	log.Print("here")
-	return reconcile.Result{}, nil
+	if err := crossplaneapis.AddToScheme(scheme); err != nil {
+		return err
+	}
+
+	return nil
 }

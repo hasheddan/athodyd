@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	runtimev1alpha1 "github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplaneio/stack-gcp/apis"
 	"github.com/crossplaneio/stack-gcp/apis/v1alpha3"
 	"github.com/hasheddan/athodyd"
 	corev1 "k8s.io/api/core/v1"
@@ -81,26 +80,27 @@ func TestThis(t *testing.T) {
 			},
 			Persist: true,
 		},
-		{
-			Name:        "TestCreateAnotherNamespace",
-			Description: "This test creates the same namespace as before.",
-			Executor: func(c client.Client) error {
-				n := &corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "cool-namespace",
-					},
-				}
-				if err := c.Create(context.TODO(), n); err != nil {
-					return err
-				}
+		// Uncomment to view failure case
+		// {
+		// 	Name:        "TestCreateAnotherNamespace",
+		// 	Description: "This test creates the same namespace as before.",
+		// 	Executor: func(c client.Client) error {
+		// 		n := &corev1.Namespace{
+		// 			ObjectMeta: metav1.ObjectMeta{
+		// 				Name: "cool-namespace",
+		// 			},
+		// 		}
+		// 		if err := c.Create(context.TODO(), n); err != nil {
+		// 			return err
+		// 		}
 
-				return nil
-			},
-			Janitor: func(client.Client) error {
-				return nil
-			},
-			Persist: true,
-		},
+		// 		return nil
+		// 	},
+		// 	Janitor: func(client.Client) error {
+		// 		return nil
+		// 	},
+		// 	Persist: true,
+		// },
 		{
 			Name:        "TestCreateYetAnotherNamespace",
 			Description: "This test creates a different namespace.",
@@ -122,8 +122,7 @@ func TestThis(t *testing.T) {
 		},
 	}
 
-	c := &C{}
-	job, err := athodyd.NewJob("MyExampleJob", "An example job for testing athodyd.", tests, "30s", t, c.SetupWithManager, apis.AddToScheme)
+	job, err := athodyd.NewJob("MyExampleJob", "An example job for testing athodyd.", "./crds", tests, "30s", t, controllerSetupWithManager, addToScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,43 +131,3 @@ func TestThis(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-// TestThisAlso tests this
-// func TestThisAlso(t *testing.T) {
-// 	tests := []athodyd.Test{
-// 		{
-// 			Name: "blah",
-// 			CRD: &corev1.Namespace{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Name: "cool-namespace",
-// 				},
-// 			},
-// 			DesiredStatus: nil,
-// 		},
-// 		{
-// 			Name: "blah2",
-// 			CRD: &corev1.Namespace{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Name: "cool-namespace2",
-// 				},
-// 			},
-// 			DesiredStatus: nil,
-// 		},
-// 	}
-
-// 	c := &C{}
-// 	job, err := athodyd.NewJob("job", tests, "30s", t, c.SetupWithManager)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	if err := job.Run(); err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	// for _, tt := range tests {
-// 	// 	t.Run(tt.name, func(t *testing.T) {
-// 	// 		t.Log(tt.name)
-// 	// 	})
-// 	// }
-// }

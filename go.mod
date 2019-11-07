@@ -11,13 +11,14 @@ replace (
 )
 
 require (
+	github.com/crossplaneio/crossplane v0.4.0
 	github.com/crossplaneio/crossplane-runtime v0.2.1
 	github.com/crossplaneio/stack-gcp v0.2.1
-	github.com/go-openapi/strfmt v0.19.3 // indirect
-	github.com/go-openapi/validate v0.19.4 // indirect
+	github.com/google/go-cmp v0.3.1 // indirect
+	github.com/stretchr/testify v1.4.0 // indirect
+	golang.org/x/net v0.0.0-20190827160401-ba9fcec4b297 // indirect
+	gopkg.in/yaml.v2 v2.2.4 // indirect
 	k8s.io/api v0.0.0-20190918195907-bd6ac527cfd2
-	k8s.io/apiextensions-apiserver v0.0.0-20190918201827-3de75813f604
 	k8s.io/apimachinery v0.0.0-20190817020851-f2f3a405f61d
 	sigs.k8s.io/controller-runtime v0.3.0
-	sigs.k8s.io/yaml v1.1.0
 )

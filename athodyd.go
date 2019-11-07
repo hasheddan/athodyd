@@ -17,21 +17,16 @@ limitations under the License.
 package athodyd
 
 import (
-	"context"
-	"io/ioutil"
 	"testing"
 	"time"
 
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-const (
-	syncPeriod = "30s"
-)
+const syncPeriod = "30s"
 
 type setupWithManagerFunc func(manager.Manager) error
 
@@ -43,7 +38,7 @@ type executorFn func(client.Client) error
 
 type janitorFn func(client.Client) error
 
-// Test is something
+// A Test is a logical operation in a cluster environment
 type Test struct {
 	Name        string
 	Description string
@@ -52,15 +47,16 @@ type Test struct {
 	Persist     bool
 }
 
-// Config does this
+// Config is a set of configuration values for a Job
 type Config struct {
-	timeout *time.Duration
+	SyncPeriod *time.Duration
 }
 
-// Job does this
+// A Job is a set of tests that are executed sequentially in the same cluster environment
 type Job struct {
 	name             string
 	description      string
+	crdPath          string
 	mcfg             *Config
 	runner           *testing.T
 	setupWithManager setupWithManagerFunc
@@ -69,9 +65,9 @@ type Job struct {
 	tests            []Test
 }
 
-// NewJob does this
-func NewJob(name string, description string, tests []Test, timeout string, runner *testing.T, swm setupWithManagerFunc, ats addToSchemeFunc) (*Job, error) {
-	t, err := time.ParseDuration(timeout)
+// NewJob creates a new Job with provided config
+func NewJob(name string, description string, crdPath string, tests []Test, SyncPeriod string, runner *testing.T, swm setupWithManagerFunc, ats addToSchemeFunc) (*Job, error) {
+	t, err := time.ParseDuration(SyncPeriod)
 	if err != nil {
 		return nil, err
 	}
@@ -83,41 +79,51 @@ func NewJob(name string, description string, tests []Test, timeout string, runne
 
 	return &Job{
 		name:             name,
+		description:      description,
+		crdPath:          crdPath,
 		runner:           runner,
 		tests:            tests,
 		setupWithManager: swm,
 		addToScheme:      ats,
 		clean:            jc,
 		mcfg: &Config{
-			timeout: &t,
+			SyncPeriod: &t,
 		},
 	}, nil
 }
 
-// Run does this
+// Run executes provided Tests as subtests in the Job environment
 func (j *Job) Run() error {
 	j.runner.Helper()
 
+	j.runner.Log("Adding CRDs...")
+	e := &envtest.Environment{
+		CRDDirectoryPaths: []string{j.crdPath},
+	}
+
 	j.runner.Log("Starting up control plane...")
-	e := &envtest.Environment{}
 	cfg, err := e.Start()
 	if err != nil {
 		return err
 	}
 
-	mgr, err := manager.New(cfg, manager.Options{SyncPeriod: j.mcfg.timeout})
+	j.runner.Log("Creating manager...")
+	mgr, err := manager.New(cfg, manager.Options{SyncPeriod: j.mcfg.SyncPeriod})
 	if err != nil {
 		return err
 	}
 
+	j.runner.Log("Adding API types to scheme...")
 	if err := j.addToScheme(mgr.GetScheme()); err != nil {
 		return err
 	}
 
+	j.runner.Log("Registering controllers with manager...")
 	if err := j.setupWithManager(mgr); err != nil {
 		return err
 	}
 
+	j.runner.Log("Starting up manager...")
 	ch := make(chan struct{})
 	go func() error {
 		if err := mgr.Start(ch); err != nil {
@@ -131,34 +137,23 @@ func (j *Job) Run() error {
 		return err
 	}
 
-	data, err := ioutil.ReadFile("./crds/provider.yaml")
-	if err != nil {
-		panic(err)
-	}
-
-	crd := &apiextensions.CustomResourceDefinition{}
-
-	if err := convertV1Beta1ToInternal(data, crd); err != nil {
-		return err
-	}
-
-	if err := client.Create(context.TODO(), crd); err != nil {
-		return err
-	}
-
 	for _, tt := range j.tests {
 		successful := j.runner.Run(tt.Name, func(t *testing.T) {
 			t.Helper()
 			if err := tt.Executor(client); err != nil {
 				t.Fatalf("%s executor failed with error: %s", tt.Name, err)
-				err := tt.Janitor(client)
-				if err != nil {
-					t.Fatalf("%s janitor failed with error: %s", tt.Name, err)
-				}
+
 			}
 		})
 
+		if successful {
+			j.runner.Logf("%s completed successfully", tt.Name)
+		}
+
 		if !successful && !tt.Persist {
+			if err := tt.Janitor(client); err != nil {
+				j.runner.Fatalf("%s janitor failed with error: %s", tt.Name, err)
+			}
 			j.runner.Logf("%s specified exit on failure", tt.Name)
 			break
 		}
