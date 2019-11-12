@@ -18,10 +18,15 @@ package example
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
+
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	runtimev1alpha1 "github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
-	storagev1alpha3 "github.com/crossplaneio/stack-gcp/apis/storage/v1alpha3"
+	databasev1beta1 "github.com/crossplaneio/stack-gcp/apis/database/v1beta1"
 	"github.com/crossplaneio/stack-gcp/apis/v1alpha3"
 	"github.com/hasheddan/athodyd"
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +39,9 @@ import (
 func TestThis(t *testing.T) {
 	name := "MyExampleJob"
 	description := "An example job for testing athodyd"
+	dbVersion := "MYSQL_5_7"
+	ddt := "PD_SSD"
+	dds := int64(10)
 
 	tests := []athodyd.Test{
 		{
@@ -64,11 +72,11 @@ func TestThis(t *testing.T) {
 						Secret: runtimev1alpha1.SecretKeySelector{
 							Key: "credentials.json",
 							SecretReference: runtimev1alpha1.SecretReference{
-								Name:      "a-cool-secret",
-								Namespace: "a-secret-namespace",
+								Name:      "example-provider-gcp",
+								Namespace: "crossplane-system",
 							},
 						},
-						ProjectID: "some-project",
+						ProjectID: "crossplane-playground",
 					},
 				}
 
@@ -80,31 +88,61 @@ func TestThis(t *testing.T) {
 			Persist: true,
 		},
 		{
-			Name:        "TestGCPBucketClassCreation",
-			Description: "This test checks to see if a GCP BucketClass can be created successfully.",
+			Name:        "TestCloudSQLProvisioning",
+			Description: "This test checks to see if a GCP CloudSQL instance can be created successfully.",
 			Executor: func(c client.Client) error {
-				s := &storagev1alpha3.BucketClass{
+				s := &databasev1beta1.CloudSQLInstance{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "gcp-bucket",
+						Name: "gcp-cloudsql",
 					},
-					SpecTemplate: storagev1alpha3.BucketClassSpecTemplate{
-						ClassSpecTemplate: runtimev1alpha1.ClassSpecTemplate{
-							WriteConnectionSecretsToNamespace: "cool-namespace",
+					Spec: databasev1beta1.CloudSQLInstanceSpec{
+						ResourceSpec: runtimev1alpha1.ResourceSpec{
 							ProviderReference: &corev1.ObjectReference{
 								Name: "gcp-provider",
 							},
+							ReclaimPolicy: runtimev1alpha1.ReclaimDelete,
 						},
-						BucketParameters: storagev1alpha3.BucketParameters{
-							BucketSpecAttrs: storagev1alpha3.BucketSpecAttrs{
-								StorageClass: "REGIONAL",
+						ForProvider: databasev1beta1.CloudSQLInstanceParameters{
+							Region:          "us-central1",
+							DatabaseVersion: &dbVersion,
+							Settings: databasev1beta1.Settings{
+								Tier:           "db-n1-standard-1",
+								DataDiskType:   &ddt,
+								DataDiskSizeGb: &dds,
 							},
 						},
 					},
 				}
 
-				return c.Create(context.TODO(), s)
+				if err := c.Create(context.TODO(), s); err != nil {
+					return err
+				}
+
+				d, err := time.ParseDuration("20s")
+				if err != nil {
+					return err
+				}
+
+				dt, err := time.ParseDuration("500s")
+				if err != nil {
+					return err
+				}
+
+				wait.PollImmediate(d, dt, func() (bool, error) {
+					fmt.Println("CHECK")
+					g := &databasev1beta1.CloudSQLInstance{}
+					if err := c.Get(context.TODO(), types.NamespacedName{Name: "gcp-cloudsql"}, g); err != nil {
+						return false, err
+					}
+					if g.Status.AtProvider.State == databasev1beta1.StateRunnable {
+						return true, nil
+					}
+					return false, nil
+				})
+				return nil
 			},
 			Janitor: func(client.Client) error {
+				// TODO: implement janitor
 				return nil
 			},
 			Persist: false,
@@ -133,24 +171,12 @@ func TestThis(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cleaner := func(c client.Client) error {
-		if err := c.DeleteAllOf(context.TODO(), &v1alpha3.Provider{}); err != nil {
-			return err
-		}
-
-		if err := c.DeleteAllOf(context.TODO(), &storagev1alpha3.BucketClass{}); err != nil {
-			return err
-		}
-
-		return nil
-	}
-
 	job := athodyd.NewJob(name, description, tests, t,
 		athodyd.WithCluster(cfg),
-		athodyd.WithCRDDirectoryPaths([]string{"./crds"}),
+		athodyd.WithCRDDirectoryPaths([]string{"../crds"}),
 		athodyd.WithSetupWithManager(controllerSetupWithManager),
 		athodyd.WithAddToScheme(addToScheme),
-		athodyd.WithCleaner(cleaner),
+		// TODO: add cleaner
 	)
 
 	if err := job.Run(); err != nil {
