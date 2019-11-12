@@ -21,15 +21,20 @@ import (
 	"testing"
 
 	runtimev1alpha1 "github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
+	storagev1alpha3 "github.com/crossplaneio/stack-gcp/apis/storage/v1alpha3"
 	"github.com/crossplaneio/stack-gcp/apis/v1alpha3"
 	"github.com/hasheddan/athodyd"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 // TestThis tests this
 func TestThis(t *testing.T) {
+	name := "MyExampleJob"
+	description := "An example job for testing athodyd"
+
 	tests := []athodyd.Test{
 		{
 			Name:        "TestCreateNamespaceSuccessful",
@@ -40,11 +45,8 @@ func TestThis(t *testing.T) {
 						Name: "cool-namespace",
 					},
 				}
-				if err := c.Create(context.TODO(), n); err != nil {
-					return err
-				}
 
-				return nil
+				return c.Create(context.TODO(), n)
 			},
 			Janitor: func(client.Client) error {
 				return nil
@@ -56,7 +58,7 @@ func TestThis(t *testing.T) {
 			Executor: func(c client.Client) error {
 				p := &v1alpha3.Provider{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "yooooo",
+						Name: "gcp-provider",
 					},
 					Spec: v1alpha3.ProviderSpec{
 						Secret: runtimev1alpha1.SecretKeySelector{
@@ -69,40 +71,46 @@ func TestThis(t *testing.T) {
 						ProjectID: "some-project",
 					},
 				}
-				if err := c.Create(context.TODO(), p); err != nil {
-					return err
-				}
 
-				return nil
+				return c.Create(context.TODO(), p)
 			},
 			Janitor: func(client.Client) error {
 				return nil
 			},
 			Persist: true,
 		},
-		// Uncomment to view failure case
-		// {
-		// 	Name:        "TestCreateAnotherNamespace",
-		// 	Description: "This test creates the same namespace as before.",
-		// 	Executor: func(c client.Client) error {
-		// 		n := &corev1.Namespace{
-		// 			ObjectMeta: metav1.ObjectMeta{
-		// 				Name: "cool-namespace",
-		// 			},
-		// 		}
-		// 		if err := c.Create(context.TODO(), n); err != nil {
-		// 			return err
-		// 		}
-
-		// 		return nil
-		// 	},
-		// 	Janitor: func(client.Client) error {
-		// 		return nil
-		// 	},
-		// 	Persist: true,
-		// },
 		{
-			Name:        "TestCreateYetAnotherNamespace",
+			Name:        "TestGCPBucketClassCreation",
+			Description: "This test checks to see if a GCP BucketClass can be created successfully.",
+			Executor: func(c client.Client) error {
+				s := &storagev1alpha3.BucketClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "gcp-bucket",
+					},
+					SpecTemplate: storagev1alpha3.BucketClassSpecTemplate{
+						ClassSpecTemplate: runtimev1alpha1.ClassSpecTemplate{
+							WriteConnectionSecretsToNamespace: "cool-namespace",
+							ProviderReference: &corev1.ObjectReference{
+								Name: "gcp-provider",
+							},
+						},
+						BucketParameters: storagev1alpha3.BucketParameters{
+							BucketSpecAttrs: storagev1alpha3.BucketSpecAttrs{
+								StorageClass: "REGIONAL",
+							},
+						},
+					},
+				}
+
+				return c.Create(context.TODO(), s)
+			},
+			Janitor: func(client.Client) error {
+				return nil
+			},
+			Persist: false,
+		},
+		{
+			Name:        "TestCreateAnotherNamespace",
 			Description: "This test creates a different namespace.",
 			Executor: func(c client.Client) error {
 				n := &corev1.Namespace{
@@ -110,22 +118,40 @@ func TestThis(t *testing.T) {
 						Name: "keen-namespace",
 					},
 				}
-				if err := c.Create(context.TODO(), n); err != nil {
-					return err
-				}
 
-				return nil
+				return c.Create(context.TODO(), n)
 			},
 			Janitor: func(client.Client) error {
 				return nil
 			},
+			Persist: true,
 		},
 	}
 
-	job, err := athodyd.NewJob("MyExampleJob", "An example job for testing athodyd.", "./crds", tests, "30s", t, controllerSetupWithManager, addToScheme)
+	cfg, err := config.GetConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	cleaner := func(c client.Client) error {
+		if err := c.DeleteAllOf(context.TODO(), &v1alpha3.Provider{}); err != nil {
+			return err
+		}
+
+		if err := c.DeleteAllOf(context.TODO(), &storagev1alpha3.BucketClass{}); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	job := athodyd.NewJob(name, description, tests, t,
+		athodyd.WithCluster(cfg),
+		athodyd.WithCRDDirectoryPaths([]string{"./crds"}),
+		athodyd.WithSetupWithManager(controllerSetupWithManager),
+		athodyd.WithAddToScheme(addToScheme),
+		athodyd.WithCleaner(cleaner),
+	)
 
 	if err := job.Run(); err != nil {
 		t.Fatal(err)
