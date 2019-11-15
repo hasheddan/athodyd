@@ -3,11 +3,11 @@ module github.com/hasheddan/athodyd
 go 1.12
 
 replace (
-	k8s.io/api => k8s.io/api v0.0.0-20191004102349-159aefb8556b
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20191114015135-f299f23b335b
-	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20191004074956-c5d2f014d689
-	k8s.io/apiserver => k8s.io/apiserver v0.0.0-20191114014928-cb77609d7449
-	k8s.io/client-go => k8s.io/client-go v11.0.1-0.20191029005444-8e4128053008+incompatible
+	k8s.io/api => k8s.io/api v0.0.0-20190409021203-6e4e0e4f393b
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190409022649-727a075fdec8
+	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190404173353-6a84e37a896d
+	k8s.io/apiserver => k8s.io/apiserver v0.0.0-20190409021813-1ec86e4da56c
+	k8s.io/client-go => k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 )
 
 require (
